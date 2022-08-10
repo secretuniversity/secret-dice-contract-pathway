@@ -11,7 +11,7 @@ A simple dice roll game implemented as a Secret Contract for the Secret Network.
 Launching via Gitpod will create an environment that automatically starts `localsecret` (dockerized Secret Network), 
 and exposes the ports for application development.
 
-[![Open in Gitpod](https://gitpod.io/button/open-in-gitpod.svg)](https://gitpod.io/#https://github.com/secretuniversity/SecretDiceContractPathway)
+[![Open in Gitpod](https://gitpod.io/button/open-in-gitpod.svg)](https://gitpod.io/#https://github.com/secretuniversity/secret-dice-contract-pathway)
 
 ## Connecting from outside Gitpod
 
