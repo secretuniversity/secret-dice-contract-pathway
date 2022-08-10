@@ -1,4 +1,4 @@
-image: ghcr.io/scrtlabs/localsecret:v1.4.0-cw-v1-beta.2
+image: ghcr.io/scrtlabs/localsecret-gitpod:latest
 
 tasks:
   - command: |
