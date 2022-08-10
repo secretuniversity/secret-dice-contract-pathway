@@ -1,6 +1,6 @@
 # SecretDice Contract Pathway
 
-[![Gitpod ready-to-code](https://img.shields.io/badge/Gitpod-ready--to--code-blue?logo=gitpod)](https://gitpod.io/#https://github.com/secretuniversity/secret-dice-contract-pathwa)
+[![Gitpod ready-to-code](https://img.shields.io/badge/Gitpod-ready--to--code-blue?logo=gitpod)](https://gitpod.io/#https://github.com/secretuniversity/secret-dice-contract-pathway)
 
 The [SecretDice Contract Pathway](https://scrt.university/secret-dice-contract-pathway) (TBD), the beginner contract course at Secret University, is meant to showcase what's possible with privacy and randomness on Secret Network.
 
