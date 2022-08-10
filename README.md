@@ -1,6 +1,6 @@
 # SecretDice Contract Pathway
 
-[![Gitpod ready-to-code](https://img.shields.io/badge/Gitpod-ready--to--code-blue?logo=gitpod)](https://gitpod.io/#https://github.com/secretuniversity/secret-dice-contract-pathway){:target="_blank"}
+[![Gitpod ready-to-code](https://img.shields.io/badge/Gitpod-ready--to--code-blue?logo=gitpod)](https://gitpod.io/#https://github.com/secretuniversity/secret-dice-contract-pathway target="_blank")
 
 The [SecretDice Contract Pathway](https://scrt.university/secret-dice-contract-pathway) (TBD), the beginner contract course at Secret University, is meant to showcase what's possible with privacy and randomness on Secret Network.
 
@@ -11,7 +11,7 @@ A simple dice roll game implemented as a Secret Contract for the Secret Network.
 Launching via Gitpod will create an environment that automatically starts `localsecret` (dockerized Secret Network), 
 and exposes the ports for application development.
 
-[![Open in Gitpod](https://gitpod.io/button/open-in-gitpod.svg)](https://gitpod.io/#https://github.com/secretuniversity/secret-dice-contract-pathway){:target="_blank"}
+[![Open in Gitpod](https://gitpod.io/button/open-in-gitpod.svg)](https://gitpod.io/#https://github.com/secretuniversity/secret-dice-contract-pathway target="_blank")
 
 ## Connecting from outside Gitpod
 
