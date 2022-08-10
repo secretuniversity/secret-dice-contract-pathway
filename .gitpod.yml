@@ -1,13 +1,22 @@
 image: ghcr.io/scrtlabs/localsecret:v1.4.0-cw-v1-beta.2
 
 tasks:
-  - init: cargo wasm
+  - before: |
+      echo "Setting up Rust toolchain"
+      CARGO_HOME=/home/gitpod/.cargo rustup install nightly
+      rustup target add wasm32-unknown-unknown --toolchain nightly
+      rustup default nightly
+  - init: |
+      echo "Building contract"
+      cargo wasm
   - command: |
+      echo "Starting faucet server"
       node /home/gitpod/faucet_server.js
   - command: |
+      echo "Starting localsecret blockchain"
       cd /home/gitpod/ && SCRT_SGX_STORAGE=/opt/secret/.sgx_secrets /home/gitpod/bootstrap_init.sh false
   - command: |
-      echo "Hello and welcome to the Secret Network"
+      echo "Welcome to the SecretDice Contract Pathway brought to you by Secret University!"
       
 vscode:
   extensions:
