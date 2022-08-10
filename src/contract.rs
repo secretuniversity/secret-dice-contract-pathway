@@ -1,5 +1,5 @@
 use cosmwasm_std::{
-    entry_point, to_binary, Deps, DepsMut, Env,
+    entry_point, to_binary, Deps, DepsMut, Env, Uint128,
     MessageInfo, QueryResponse, Response, StdError, StdResult
 };
 
@@ -8,8 +8,8 @@ use rand_chacha::ChaChaRng;
 use sha2::{Digest, Sha256};
 
 use crate::error::{ContractError};
-use crate::msg::{ExecuteMsg, InstantiateMsg, QueryMsg, DiceRollResponse, WinnerResponse};
-use crate::state::{config, config_read, ContractState, DiceRoller, State};
+use crate::msg::{ExecuteMsg, InstantiateMsg, QueryMsg, WinnerResponse};
+use crate::state::{config, config_read, ContractState, DiceRoller, Winner, State};
 
 
 //////////////////////////////////////////////////////////////////////
@@ -42,33 +42,46 @@ pub fn execute(
     msg: ExecuteMsg,
 ) -> Result<Response, ContractError> {
     match msg {
-        ExecuteMsg::Join { secret } => try_join(deps, info, secret),
-        ExecuteMsg::RollDice { } => try_roll_dice(deps, info),
-        ExecuteMsg::Leave { } => try_leave(deps, info),
+        ExecuteMsg::Join { name, secret } => try_join(deps, info, name, secret),
+        ExecuteMsg::RollDice {} => try_roll_dice(deps, info),
+        ExecuteMsg::Leave {} => try_leave(deps, info),
     }
 }
 
 pub fn try_join(
     deps: DepsMut,
     info: MessageInfo,
-    secret: UInt128,
+    name: String,
+    secret: Uint128,
 ) -> Result<Response, ContractError> {
     let mut state = config(deps.storage).load()?;
+
+    // player 1 joins, sends a secret and deposits 1 SCRT to the contract
+    // player 1's secret is stored privately
+    //
+    // player 2 joins, sends a secret and deposits 1 SCRT to the contract
+    // player 2's secret is stored privately
 
     // Check the state of the game
     match state.state {
         ContractState::Init => {
-            state.player_1 = DiceRoller::new(info.sender, secret);
+            deposit_funds(&info);
+            state.player_1 = DiceRoller::new(name, info.sender, secret);
             state.state = ContractState::Got1;
-        }
+        },
         ContractState::Got1 => {
-            state.player_2 = DiceRoller::new(info.sender, secret);
+            deposit_funds(&info);
+            state.player_2 = DiceRoller::new(name, info.sender, secret);
             state.state = ContractState::Got2;
-        }
+        },
         ContractState::Got2 => {
             // We already have both players
             return Err(ContractError::GameIsFull);
-        }
+        },
+        ContractState::Done => {
+            // Game is already over
+            return Err(ContractError::GameIsAlreadyOver);
+        },
     }
 
     config(deps.storage).save(&state)?;
@@ -77,20 +90,77 @@ pub fn try_join(
         .add_attribute("action", "join"))
 }
 
+fn deposit_funds(
+    info: &MessageInfo,
+) -> Result<Response, ContractError> {
+
+    let amount = Uint128::new(1_000_000 /* 1mn uscrt = 1 SCRT */);
+    if info.funds.len() != 1
+        || info.funds[0].amount != amount
+        || info.funds[0].denom != String::from("uscrt")
+    {
+        return Err(ContractError::MustDepositScrtToPlay);
+    }
+
+    Ok(Response::default())
+}
+
 pub fn try_roll_dice(
     deps: DepsMut,
     info: MessageInfo,
 ) -> Result<Response, ContractError> {
     let mut state = config(deps.storage).load()?;
 
-    if state.winner.is_some() {
-        return Err(ContractError::GameIsAlreadyOver { state.winner });
+    // once player 2 joins, we can derive a shared secret that no one knows
+    // then we can roll the dice and choose a winner
+    // dice roll 1-3: player 1 wins / dice roll 4-6: player 2 wins
+    //
+    // the winner then gets 2 SCRT
+
+    // Check the state of the game
+    match state.state {
+        ContractState::Init => {
+            return Err(ContractError::StillWaitingForPlayers);
+        },
+        ContractState::Got1 => {
+            return Err(ContractError::StillWaitingForPlayers);
+        },
+        ContractState::Got2 => {
+            let mut combined_secret: Vec<u8> = state.player_1.secret().to_be_bytes().to_vec();
+            combined_secret.extend(&state.player_2.secret().to_be_bytes());
+
+            let random_seed: [u8;32] = Sha256::digest(&combined_secret).into();
+            let mut rng = ChaChaRng::from_seed(random_seed);
+
+            state.dice_roll = ((rng.next_u32() % 6) + 1) as u8;   // a number between 1 and 6
+
+            if state.dice_roll >= 1 && state.dice_roll <=3 {
+                state.winner = Winner::new(
+                    state.player_1.name().to_string(),
+                    state.player_1.addr().clone()
+                );
+            } else {
+                state.winner = Winner::new(
+                    state.player_2.name().to_string(),
+                    state.player_2.addr().clone()
+                );
+            }
+
+            state.state = ContractState::Done;
+
+            // TODO: send all funds to winner
+        },
+        // Has a player already won the game?
+        ContractState::Done => {
+            return Err(ContractError::GameIsAlreadyOver);
+        },
     }
 
     config(deps.storage).save(&state)?;
 
     Ok(Response::new()
-        .add_attribute("action", "roll dice"))
+        .add_attribute("action", "roll dice")
+        .add_attribute("result", state.dice_roll.to_string()))
 }
 
 pub fn try_leave(
@@ -100,22 +170,15 @@ pub fn try_leave(
     let mut state = config(deps.storage).load()?;
 
     // if player 2 isn't in yet, player 1 can leave and get their money back
-    if state.player_1.addr != Some(&info.sender) {
-        return Err(ContractError::YouAreNotAPlayer));
+    if state.player_1.addr().as_ref() != info.sender {
+        return Err(ContractError::YouAreNotAPlayer);
     }
 
-    if state.winner.is_some() {
-        return Err(
-            ContractError::GameIsAlreadyOver, 
-            state.winner.unwrap()
-        );
+    if state.state == ContractState::Done {
+        return Err(ContractError::GameIsAlreadyOver);
     }
 
     state.state = ContractState::Init;
-    state.player_1.addr = None;
-    state.player_1.secret = 0;
-    state.player_2.addr = None;
-    state.player_2.secret = 0;
 
     config(deps.storage).save(&state)?;
 
@@ -153,18 +216,21 @@ pub fn query(
 
 fn query_who_won(
     deps: Deps
-) -> Result<WinnerResponse, ContractError> {
+) -> StdResult<WinnerResponse> {
+
     let state = config_read(deps.storage).load()?;
 
-
-    if state.winner.is_none() {
-        return Err(ContractError::StillWaitingForPlayers));
+    if state.state != ContractState::Done{
+        return Err(StdError::generic_err("No winner yet."));
     }
 
-    Ok(&Result {
-        winner: state.winner.unwrap(),
+    let resp = WinnerResponse {
+        name: state.winner.name().to_string(),
+        addr: state.winner.addr().clone(),
         dice_roll: state.dice_roll,
-    })?)
+    };
+        
+    Ok(resp)
 }
 
 /*

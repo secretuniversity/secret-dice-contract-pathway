@@ -7,15 +7,24 @@ pub enum ContractError {
     // let thiserror implement From<StdError> for you
     Std(#[from] StdError),
 
-    #[error("The game is full."]
+    #[error("The game is full.")]
     GameIsFull,
 
-    #[error("The game is already over. The winner was: {addr})")]
-    GameIsAlreadyOver { addr: Addr },
+    #[error("The game is already over.")]
+    GameIsAlreadyOver,
 
-    #[error("You are not a player."]
+    #[error("You are not a player.")]
     YouAreNotAPlayer,
 
-    #[error("The game is still waiting for players."]
+    #[error("The game is still waiting for players.")]
     StillWaitingForPlayers,
+
+    #[error("The game is still waiting for player 2.")]
+    StillWaitingForPlayer2,
+
+    #[error("Need to roll the dice to get a winner.")]
+    NeedToDiceRollDiceForWinner,
+
+    #[error("Must deposit 1 SCRT to play.")]
+    MustDepositScrtToPlay,
 }

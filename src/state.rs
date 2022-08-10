@@ -1,4 +1,4 @@
-use cosmwasm_std::Storage;
+use cosmwasm_std::{Addr, Uint128, Storage};
 use cosmwasm_storage::{
     ReadonlySingleton, singleton, Singleton,
     singleton_read,
@@ -8,19 +8,32 @@ use serde::{Deserialize, Serialize};
 
 const CONFIG_KEY: &[u8] = b"config";
 
-#[derive(Serialize, Deserialize, Clone, Debug, Default)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct State {
     pub state: ContractState,
-    pub player_1: <Option>DiceRoller,
-    pub player_2: <Option>DiceRoller
+    pub player_1: DiceRoller,
+    pub player_2: DiceRoller,
     pub dice_roll: u8,
-    pub winner: <Option>DiceRoller,
+    pub winner: Winner,
+}
+
+impl State {
+    pub fn default() -> State {
+        return State {
+            state: ContractState::default(),
+            player_1: DiceRoller::default(),
+            player_2: DiceRoller::default(),
+            dice_roll: 0,
+            winner: Winner::default()
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, PartialEq, Clone, Debug)]
 pub enum ContractState {
     Init,
     Got1,
+    Got2,
     Done
 }
 
@@ -35,7 +48,8 @@ impl From<u8> for ContractState {
         match num {
             0 => ContractState::Init,
             1 => ContractState::Got1,
-            2 => ContractState::Done,
+            2 => ContractState::Got2,
+            3 => ContractState::Done,
             _ => ContractState::Init
         }
     }
@@ -46,22 +60,36 @@ impl From<ContractState> for u8 {
         match state {
             ContractState::Init => 0,
             ContractState::Got1 => 1,
-            ContractState::Done => 2
+            ContractState::Got2 => 2,
+            ContractState::Done => 3,
+            _ => 0
         }
     }
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, Default, Eq)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct DiceRoller {
+    name: String,
     addr: Addr,
-    secret: UInt128
+    secret: Uint128
+}
+
+impl Default for DiceRoller {
+    fn default() -> DiceRoller {
+        return DiceRoller {
+            name: String::from(""),
+            addr: Addr::unchecked(""),
+            secret: Uint128::from(0u32)
+        }
+    }
 }
 
 impl DiceRoller {
     /// Constructor function. Takes input parameters and initializes a struct containing both
-    /// those items
-    pub fn new(addr: Addr, secret: UInt128) -> DiceRoller {
+    /// those 
+    pub fn new(name: String, addr: Addr, secret: Uint128) -> DiceRoller {
         return DiceRoller {
+            name,
             addr,
             secret
         }
@@ -70,12 +98,53 @@ impl DiceRoller {
     /// Viewer function to read the private member of the DiceRoller struct.
     /// We could make the member public instead and access it directly if we wanted to simplify
     /// access patterns
+    pub fn name(&self) -> &String {
+        &self.name
+    }
+
     pub fn addr(&self) -> &Addr {
         &self.addr
     }
 
-    pub fn secret(&self) -> &UInt128 {
+    pub fn secret(&self) -> &Uint128 {
         &self.secret
+    }
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct Winner {
+    name: String,
+    addr: Addr,
+}
+
+impl Default for Winner {
+    fn default() -> Winner {
+        return Winner {
+            name: String::from(""),
+            addr: Addr::unchecked(""),
+        }
+    }
+}
+
+impl Winner {
+    /// Constructor function. Takes input parameters and initializes a struct containing both
+    /// those items
+    pub fn new(name: String, addr: Addr) -> Winner {
+        return Winner {
+            name,
+            addr
+        }
+    }
+
+    /// Viewer function to read the private member of the Winner struct.
+    /// We could make the member public instead and access it directly if we wanted to simplify
+    /// access patterns
+    pub fn name(&self) -> &String {
+        &self.name
+    }
+
+    pub fn addr(&self) -> &Addr {
+        &self.addr
     }
 }
 
