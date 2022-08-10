@@ -16,8 +16,8 @@ and exposes the ports for application development.
 ## Connecting from outside Gitpod
 
 To connect, prepend the port number with the gitpod url. e.g. if the workspace is at 
-`https://secretuniversity-shqyv12iyrv.ws-eu54.gitpod.io` then you can connect to the LCD service at 
-`https://1317-secretuniversity-shqyv12iyrv.ws-eu54.gitpod.io`.
+`https://secretunive-secretdicec-kf37podxsnu.ws-us59.gitpod.io` then you can connect to the LCD service at 
+`https://1317-secretunive-secretdicec-kf37podxsnu.ws-us59.gitpod.io`.
 
 This repo also comes with all the dependencies you need to develop Secret Contracts, and SecretCLI. 
 
