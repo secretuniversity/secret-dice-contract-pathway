@@ -121,7 +121,7 @@ pub fn try_roll_dice(
     //
     // the winner then gets 2 SCRT
 
-    let mut dice_roll = 0u8;
+    let dice_roll: u8;
 
     // Check the state of the game
     match state.state {
@@ -147,7 +147,7 @@ pub fn try_roll_dice(
             }
 
             // saving the block height so that the winner cannpt be queried in the same block
-            block_height(deps.storage).save(&env.block.height);
+            block_height(deps.storage).save(&env.block.height)?;
 
             let mut combined_secret: Vec<u8> = player_1.secret().to_be_bytes().to_vec();
             combined_secret.extend(&player_2.secret().to_be_bytes());
@@ -355,14 +355,14 @@ mod tests {
         // there should be no winner yet since we didn't do a dice roll!
         let err = query(deps.as_ref(), mock_env(), QueryMsg::WhoWon {}).unwrap_err();
         match err {
-            e => { assert!(true) }
+            _ => { assert!(true) }
         }
     }
 
     #[test]
     fn no_query_in_same_block() {
         let mut deps = mock_dependencies();
-        let mut env = mock_env();
+        let env = mock_env();
 
         let msg = InstantiateMsg {};
         let info = mock_info("creator", &coins(1000, "earth"));
@@ -384,9 +384,11 @@ mod tests {
         let _res = execute(deps.as_mut(), env.clone(), info, ExecuteMsg::RollDice {}).unwrap();
 
         // should result in an error because execute and query on winner cannot be done in the same block height
-        let err = query(deps.as_ref(), mock_env(), QueryMsg::WhoWon {}).unwrap_err();
+        let err = query(deps.as_ref(), env, QueryMsg::WhoWon {}).unwrap_err();
         match err {
-            e => { assert!(true) }
+            _ => {
+                assert!(true);
+            }
         }
     }
 
