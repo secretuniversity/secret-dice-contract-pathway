@@ -7,24 +7,25 @@ use cosmwasm_storage::{
 use serde::{Deserialize, Serialize};
 
 const CONFIG_KEY: &[u8] = b"config";
+const BLOCK_HEIGHT_KEY: &[u8] = b"block_height";
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct State {
     pub state: ContractState,
-    pub player_1: DiceRoller,
-    pub player_2: DiceRoller,
-    pub dice_roll: u8,
-    pub winner: Winner,
+    pub player_1: Option<DiceRoller>,
+    pub player_2: Option<DiceRoller>,
+    pub dice_roll: Option<u8>,
+    pub winner: Option<Winner>,
 }
 
 impl State {
     pub fn default() -> State {
         return State {
             state: ContractState::default(),
-            player_1: DiceRoller::default(),
-            player_2: DiceRoller::default(),
-            dice_roll: 0,
-            winner: Winner::default()
+            player_1: None,
+            player_2: None,
+            dice_roll: None,
+            winner: None,
         }
     }
 }
@@ -62,7 +63,6 @@ impl From<ContractState> for u8 {
             ContractState::Got1 => 1,
             ContractState::Got2 => 2,
             ContractState::Done => 3,
-            _ => 0
         }
     }
 }
@@ -117,15 +117,6 @@ pub struct Winner {
     addr: Addr,
 }
 
-impl Default for Winner {
-    fn default() -> Winner {
-        return Winner {
-            name: String::from(""),
-            addr: Addr::unchecked(""),
-        }
-    }
-}
-
 impl Winner {
     /// Constructor function. Takes input parameters and initializes a struct containing both
     /// those items
@@ -154,4 +145,12 @@ pub fn config(storage: &mut dyn Storage) -> Singleton<State> {
 
 pub fn config_read(storage: &dyn Storage) -> ReadonlySingleton<State> {
     singleton_read(storage, CONFIG_KEY)
+}
+
+pub fn block_height(storage: &mut dyn Storage) -> Singleton<u64> {
+    singleton(storage, BLOCK_HEIGHT_KEY)
+}
+
+pub fn block_height_read(storage: &dyn Storage) -> ReadonlySingleton<u64> {
+    singleton_read(storage, BLOCK_HEIGHT_KEY)
 }

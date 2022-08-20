@@ -27,4 +27,13 @@ pub enum ContractError {
 
     #[error("Must deposit 1 SCRT to play.")]
     MustDepositScrtToPlay,
+
+    #[error("Player 1 not found.")]
+    PlayerOneNotFound,
+
+    #[error("The game is in progress.")]
+    GameIsInProgress,
+
+    #[error("No winner yet.")]
+    NoWinnerYet,
 }

@@ -9,7 +9,10 @@ use sha2::{Digest, Sha256};
 
 use crate::error::{ContractError};
 use crate::msg::{ExecuteMsg, InstantiateMsg, QueryMsg, WinnerResponse};
-use crate::state::{config, config_read, ContractState, DiceRoller, Winner, State};
+use crate::state::{
+    config, config_read, block_height, block_height_read,
+    ContractState, DiceRoller, Winner, State,
+};
 
 
 //////////////////////////////////////////////////////////////////////
@@ -37,13 +40,13 @@ pub fn instantiate(
 #[entry_point]
 pub fn execute(
     deps: DepsMut,
-    _env: Env,
+    env: Env,
     info: MessageInfo,
     msg: ExecuteMsg,
 ) -> Result<Response, ContractError> {
     match msg {
         ExecuteMsg::Join { name, secret } => try_join(deps, info, name, secret),
-        ExecuteMsg::RollDice {} => try_roll_dice(deps, info),
+        ExecuteMsg::RollDice {} => try_roll_dice(deps, env, info),
         ExecuteMsg::Leave {} => try_leave(deps, info),
     }
 }
@@ -65,13 +68,13 @@ pub fn try_join(
     // Check the state of the game
     match state.state {
         ContractState::Init => {
-            deposit_funds(&info);
-            state.player_1 = DiceRoller::new(name, info.sender, secret);
+            deposit_funds(&info)?;
+            state.player_1 = Some(DiceRoller::new(name, info.sender, secret));
             state.state = ContractState::Got1;
         },
         ContractState::Got1 => {
-            deposit_funds(&info);
-            state.player_2 = DiceRoller::new(name, info.sender, secret);
+            deposit_funds(&info)?;
+            state.player_2 = Some(DiceRoller::new(name, info.sender, secret));
             state.state = ContractState::Got2;
         },
         ContractState::Got2 => {
@@ -107,6 +110,7 @@ fn deposit_funds(
 
 pub fn try_roll_dice(
     deps: DepsMut,
+    env: Env,
     info: MessageInfo,
 ) -> Result<Response, ContractError> {
     let mut state = config(deps.storage).load()?;
@@ -117,6 +121,8 @@ pub fn try_roll_dice(
     //
     // the winner then gets 2 SCRT
 
+    let mut dice_roll = 0u8;
+
     // Check the state of the game
     match state.state {
         ContractState::Init => {
@@ -126,24 +132,42 @@ pub fn try_roll_dice(
             return Err(ContractError::StillWaitingForPlayers);
         },
         ContractState::Got2 => {
-            let mut combined_secret: Vec<u8> = state.player_1.secret().to_be_bytes().to_vec();
-            combined_secret.extend(&state.player_2.secret().to_be_bytes());
+            // get players
+            let player_1 = if let Some(player_1) = &state.player_1 {
+              player_1
+            } else { return Err(ContractError::StillWaitingForPlayers) };
+
+            let player_2 = if let Some(player_2) = &state.player_2 {
+              player_2
+            } else { return Err(ContractError::StillWaitingForPlayers) };
+
+            // validate players
+            if player_1.addr() != &info.sender && player_2.addr() != &info.sender {
+                return Err(ContractError::YouAreNotAPlayer);
+            }
+
+            // saving the block height so that the winner cannpt be queried in the same block
+            block_height(deps.storage).save(&env.block.height);
+
+            let mut combined_secret: Vec<u8> = player_1.secret().to_be_bytes().to_vec();
+            combined_secret.extend(&player_2.secret().to_be_bytes());
 
             let random_seed: [u8;32] = Sha256::digest(&combined_secret).into();
             let mut rng = ChaChaRng::from_seed(random_seed);
 
-            state.dice_roll = ((rng.next_u32() % 6) + 1) as u8;   // a number between 1 and 6
+            dice_roll = ((rng.next_u32() % 6) + 1) as u8;   // a number between 1 and 6
+            state.dice_roll = Some(dice_roll);
 
-            if state.dice_roll >= 1 && state.dice_roll <=3 {
-                state.winner = Winner::new(
-                    state.player_1.name().to_string(),
-                    state.player_1.addr().clone()
-                );
+            if dice_roll >= 1 && dice_roll <= 3 {
+                state.winner = Some(Winner::new(
+                    player_1.name().to_string(),
+                    player_1.addr().clone()
+                ));
             } else {
-                state.winner = Winner::new(
-                    state.player_2.name().to_string(),
-                    state.player_2.addr().clone()
-                );
+                state.winner = Some(Winner::new(
+                    player_2.name().to_string(),
+                    player_2.addr().clone()
+                ));
             }
 
             state.state = ContractState::Done;
@@ -160,7 +184,7 @@ pub fn try_roll_dice(
 
     Ok(Response::new()
         .add_attribute("action", "roll dice")
-        .add_attribute("result", state.dice_roll.to_string()))
+        .add_attribute("result", dice_roll.to_string()))
 }
 
 pub fn try_leave(
@@ -169,9 +193,20 @@ pub fn try_leave(
 ) -> Result<Response, ContractError> {
     let mut state = config(deps.storage).load()?;
 
+    let player_1 = if let Some(player_1) = &state.player_1 {
+        player_1
+    } else {
+        return Err(ContractError::PlayerOneNotFound);
+    };
+
     // if player 2 isn't in yet, player 1 can leave and get their money back
-    if state.player_1.addr().as_ref() != info.sender {
+    if player_1.addr().as_ref() != info.sender {
         return Err(ContractError::YouAreNotAPlayer);
+    }
+
+    // if we have both player 1 and player 2, game is in progress
+    if state.player_2.is_some() && state.state != ContractState::Done {
+        return Err(ContractError::GameIsInProgress);
     }
 
     if state.state == ContractState::Done {
@@ -206,40 +241,62 @@ pub fn try_leave(
 #[entry_point]
 pub fn query(
     deps: Deps,
-    _env: Env,
+    env: Env,
     msg: QueryMsg
 ) -> StdResult<QueryResponse> {
     match msg {
-        QueryMsg::WhoWon {} => to_binary(&query_who_won(deps)?),
+        QueryMsg::WhoWon {} => to_binary(&query_who_won(deps, env)?),
     }
 }
 
 fn query_who_won(
-    deps: Deps
+    deps: Deps,
+    env: Env,
 ) -> StdResult<WinnerResponse> {
 
     let state = config_read(deps.storage).load()?;
 
-    if state.state != ContractState::Done{
+    if state.state != ContractState::Done {
         return Err(StdError::generic_err("No winner yet."));
     }
 
+    // check that the query is happening after the block where the winner is decided
+    let winner_height = block_height_read(deps.storage).load()?;
+    let current_height = env.block.height;
+
+    if current_height <= winner_height {
+        return Err(
+            StdError::generic_err(
+                "Querying who won is not allowed until after the winner has been finalized."
+        ));
+    }
+
+    let dice_roll = if let Some(dice_roll) = state.dice_roll {
+        dice_roll
+    } else {
+        return Err(StdError::generic_err("Dice roll not found."));
+    };
+
+    let winner = if let Some(winner) = &state.winner {
+        winner
+    } else {
+        return Err(StdError::generic_err("Winner not found."));
+    };
+
     let resp = WinnerResponse {
-        name: state.winner.name().to_string(),
-        addr: state.winner.addr().clone(),
-        dice_roll: state.dice_roll,
+        name: winner.name().to_string(),
+        addr: winner.addr().clone(),
+        dice_roll: dice_roll,
     };
         
     Ok(resp)
 }
 
-/*
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    use cosmwasm_std::testing::{mock_env, mock_info, mock_dependencies};
-    use cosmwasm_std::coins;
+    use cosmwasm_std::testing::{mock_dependencies, mock_env, mock_info};
+    use cosmwasm_std::{coins, from_binary};
 
     #[test]
     fn proper_instantialization() {
@@ -251,59 +308,115 @@ mod tests {
         // we can just call .unwrap() to assert this was a success
         let res = instantiate(deps.as_mut(), mock_env(), info, msg).unwrap();
         assert_eq!(0, res.messages.len());
-
-        // it worked, let's query the state
-        let _ = query_who_is_richer(deps.as_ref()).unwrap_err();
     }
 
     #[test]
-    fn solve_millionaire() {
+    fn still_waiting_for_players() {
         let mut deps = mock_dependencies();
 
         let msg = InstantiateMsg {};
-        let info = mock_info("creator", &coins(2, "token"));
+        let info = mock_info("creator", &coins(1000, "earth"));
         let _res = instantiate(deps.as_mut(), mock_env(), info, msg).unwrap();
 
-        let msg_player1 = ExecuteMsg::SubmitNetWorth {worth: 1, name: "alice".to_string()};
-        let msg_player2 = ExecuteMsg::SubmitNetWorth {worth: 2, name: "bob".to_string()};
+        // Player 1 joins the game
+        let secret_1 = Uint128::new(1234u128);
+        let msg_player_1 = ExecuteMsg::Join {name: "alice".to_string(), secret: secret_1};
+        let info = mock_info("alice", &coins(1_000_000, "uscrt"));
+        let _res = execute(deps.as_mut(), mock_env(), info.clone(), msg_player_1).unwrap();
 
-        let info = mock_info("creator", &[]);
-
-        let _res = execute(deps.as_mut(), mock_env(), info.clone(), msg_player1).unwrap();
-        let _res = execute(deps.as_mut(), mock_env(), info, msg_player2).unwrap();
-
-        // it worked, let's query the state
-        let value = query_who_is_richer(deps.as_ref()).unwrap();
-
-        assert_eq!(&value.richer, "bob")
-
+        // Player 1 tries to roll the dice -- should produce an error
+        let err = execute(deps.as_mut(), mock_env(), info, ExecuteMsg::RollDice {}).unwrap_err();
+        match err {
+            ContractError::StillWaitingForPlayers {} => assert!(true),
+            _e => { assert!(false) }
+        }
     }
 
     #[test]
-    fn test_reset_state() {
+    fn no_winner_yet() {
         let mut deps = mock_dependencies();
 
         let msg = InstantiateMsg {};
-        let info = mock_info("creator", &coins(2, "token"));
+        let info = mock_info("creator", &coins(1000, "earth"));
         let _res = instantiate(deps.as_mut(), mock_env(), info, msg).unwrap();
 
-        let msg_player1 = ExecuteMsg::SubmitNetWorth {worth: 1, name: "alice".to_string()};
+        // Player 1 joins the game
+        let secret_1 = Uint128::new(1234u128);
+        let msg_player_1 = ExecuteMsg::Join {name: "alice".to_string(), secret: secret_1};
+        let info = mock_info("alice", &coins(1_000_000, "uscrt"));
+        let _res = execute(deps.as_mut(), mock_env(), info, msg_player_1).unwrap();
 
-        let info = mock_info("creator", &[]);
-        let _res = execute(deps.as_mut(), mock_env(), info.clone(), msg_player1).unwrap();
+        // Player 2 joins the game
+        let secret_2 = Uint128::new(5678u128);
+        let msg_player_2 = ExecuteMsg::Join {name: "bob".to_string(), secret: secret_2};
+        let info = mock_info("bob", &coins(1_000_000, "uscrt"));
+        let _res = execute(deps.as_mut(), mock_env(), info, msg_player_2).unwrap();
 
-        let reset_msg = ExecuteMsg::Reset {};
-        let _res = execute(deps.as_mut(), mock_env(), info.clone(), reset_msg).unwrap();
+        // there should be no winner yet since we didn't do a dice roll!
+        let err = query(deps.as_ref(), mock_env(), QueryMsg::WhoWon {}).unwrap_err();
+        match err {
+            e => { assert!(true) }
+        }
+    }
 
-        let msg_player2 = ExecuteMsg::SubmitNetWorth {worth: 2, name: "bob".to_string()};
-        let msg_player3 = ExecuteMsg::SubmitNetWorth {worth: 3, name: "carol".to_string()};
+    #[test]
+    fn no_query_in_same_block() {
+        let mut deps = mock_dependencies();
+        let mut env = mock_env();
 
-        let _res = execute(deps.as_mut(), mock_env(), info.clone(), msg_player2).unwrap();
-        let _res = execute(deps.as_mut(), mock_env(), info.clone(), msg_player3).unwrap();
+        let msg = InstantiateMsg {};
+        let info = mock_info("creator", &coins(1000, "earth"));
+        let _res = instantiate(deps.as_mut(), env.clone(), info, msg).unwrap();
 
-        // it worked, let's query the state
-        let value = query_who_is_richer(deps.as_ref()).unwrap();
+        // Player 1 joins the game
+        let secret_1 = Uint128::new(1234u128);
+        let msg_player_1 = ExecuteMsg::Join {name: "alice".to_string(), secret: secret_1};
+        let info = mock_info("alice", &coins(1_000_000, "uscrt"));
+        let _res = execute(deps.as_mut(), env.clone(), info, msg_player_1).unwrap();
 
-        assert_eq!(&value.richer, "carol")    }
+        // Player 2 joins the game
+        let secret_2 = Uint128::new(5678u128);
+        let msg_player_2 = ExecuteMsg::Join {name: "bob".to_string(), secret: secret_2};
+        let info = mock_info("bob", &coins(1_000_000, "uscrt"));
+        let _res = execute(deps.as_mut(), env.clone(), info.clone(), msg_player_2).unwrap();
+
+        // Player 2 rolls the dice
+        let _res = execute(deps.as_mut(), env.clone(), info, ExecuteMsg::RollDice {}).unwrap();
+
+        // should result in an error because execute and query on winner cannot be done in the same block height
+        let err = query(deps.as_ref(), mock_env(), QueryMsg::WhoWon {}).unwrap_err();
+        match err {
+            e => { assert!(true) }
+        }
+    }
+
+    #[test]
+    fn play_round() {
+        let mut deps = mock_dependencies();
+        let mut env = mock_env();
+
+        let msg = InstantiateMsg {};
+        let info = mock_info("creator", &coins(1000, "earth"));
+        let _res = instantiate(deps.as_mut(), env.clone(), info, msg).unwrap();
+
+        let secret_1 = Uint128::new(1234u128);
+        let msg_player_1 = ExecuteMsg::Join {name: "alice".to_string(), secret: secret_1};
+        let info = mock_info("alice", &coins(1_000_000, "uscrt"));
+        let _res = execute(deps.as_mut(), env.clone(), info, msg_player_1).unwrap();
+
+        let secret_2 = Uint128::new(5678u128);
+        let msg_player_2 = ExecuteMsg::Join {name: "bob".to_string(), secret: secret_2};
+        let info = mock_info("bob", &coins(1_000_000, "uscrt"));
+        let _res = execute(deps.as_mut(), env.clone(), info.clone(), msg_player_2).unwrap();
+
+        // player 2 rolls the dice
+        let _res = execute(deps.as_mut(), env.clone(), info, ExecuteMsg::RollDice {}).unwrap();
+
+        // advance block height by 1 to be able to query for winner
+        env.block.height += 1;
+        let res = query(deps.as_ref(), env, QueryMsg::WhoWon {}).unwrap();
+        let value: WinnerResponse = from_binary(&res).unwrap();
+
+        assert_eq!(value.name.is_empty(), false);
+    }
 }
-*/
