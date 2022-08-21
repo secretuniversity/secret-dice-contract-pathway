@@ -1,7 +1,6 @@
 use cosmwasm_std::{
     entry_point, to_binary, Deps, DepsMut, Env, Uint128, Coin,
-    MessageInfo, QueryResponse, Response,
-    CosmosMsg, BankMsg, BalanceResponse,
+    MessageInfo, QueryResponse, Response, CosmosMsg, BankMsg,
     StdError, StdResult
 };
 
@@ -307,7 +306,7 @@ fn query_who_won(
 mod tests {
     use super::*;
     use cosmwasm_std::testing::{mock_dependencies, mock_env, mock_info};
-    use cosmwasm_std::{coins, Coin, from_binary, QueryRequest, BankQuery::Balance};
+    use cosmwasm_std::{coins, Coin, from_binary, QueryRequest, BankQuery::Balance, BalanceResponse};
 
     #[test]
     fn proper_instantialization() {

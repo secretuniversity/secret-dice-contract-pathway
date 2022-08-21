@@ -59,3 +59,4 @@ start-server: # CTRL+C to stop
 clean:
 	cargo clean
 	-rm -f ./contract.wasm ./contract.wasm.gz
+
