@@ -14,3 +14,6 @@ contract.wasm*
 
 # ViM
 *.swp
+
+tests/node_modules
+tests/package-lock.json
