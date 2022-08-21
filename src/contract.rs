@@ -101,7 +101,7 @@ fn deposit_funds(
     let amount = Uint128::new(1_000_000 /* 1mn uscrt = 1 SCRT */);
     if info.funds.len() != 1
         || info.funds[0].amount != amount
-        || info.funds[0].denom != String::from("uscrt")
+        || info.funds[0].denom != *"uscrt"
     {
         return Err(ContractError::MustDepositScrtToPlay);
     }
@@ -153,6 +153,7 @@ pub fn try_roll_dice(
 
             let mut combined_secret: Vec<u8> = player_1.secret().to_be_bytes().to_vec();
             combined_secret.extend(&player_2.secret().to_be_bytes());
+            combined_secret.extend(env.block.time.to_string().as_bytes());
 
             let random_seed: [u8;32] = Sha256::digest(&combined_secret).into();
             let mut rng = ChaChaRng::from_seed(random_seed);
@@ -160,18 +161,17 @@ pub fn try_roll_dice(
             dice_roll = ((rng.next_u32() % 6) + 1) as u8;   // a number between 1 and 6
             state.dice_roll = Some(dice_roll);
 
-            let winner: Winner;
-            if dice_roll >= 1 && dice_roll <= 3 {
-                winner = Winner::new(
+            let winner: Winner = if (1..=3).contains(&dice_roll) {
+                Winner::new(
                     player_1.name().to_string(),
                     player_1.addr().clone()
-                );
+                )
             } else {
-                winner = Winner::new(
+                Winner::new(
                     player_2.name().to_string(),
                     player_2.addr().clone()
-                );
-            }
+                )
+            };
             println!("dice roll = {}", dice_roll);
             println!("winner is {}", winner.name());
 
@@ -230,11 +230,10 @@ pub fn try_leave(
     config(deps.storage).save(&state)?;
 
     // Player 1 leaves the game before another player can join, and gets a refund on their deposit
-    let mut messages: Vec<CosmosMsg> = vec![];
-    messages.push(CosmosMsg::Bank(BankMsg::Send {
+    let messages: Vec<CosmosMsg> = vec![CosmosMsg::Bank(BankMsg::Send {
         to_address: player_1.addr().to_string(),
-        amount: vec![Coin::new(1_000_000, "uscrt")], // 1mn uscrt = 1 SCRT
-    }));
+        amount: vec![Coin::new(1_000_000, "uscrt")], // 1mn uscrt = 1 SCRT];
+    })];
 
     Ok(Response::new()
         .add_messages(messages)
@@ -296,7 +295,7 @@ fn query_who_won(
     let resp = WinnerResponse {
         name: winner.name().to_string(),
         addr: winner.addr().clone(),
-        dice_roll: dice_roll,
+        dice_roll,
     };
         
     Ok(resp)

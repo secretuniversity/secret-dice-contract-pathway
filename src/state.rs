@@ -20,7 +20,7 @@ pub struct State {
 
 impl State {
     pub fn default() -> State {
-        return State {
+        State {
             state: ContractState::default(),
             player_1: None,
             player_2: None,
@@ -76,7 +76,7 @@ pub struct DiceRoller {
 
 impl Default for DiceRoller {
     fn default() -> DiceRoller {
-        return DiceRoller {
+        DiceRoller {
             name: String::from(""),
             addr: Addr::unchecked(""),
             secret: Uint128::from(0u32)
@@ -88,7 +88,7 @@ impl DiceRoller {
     /// Constructor function. Takes input parameters and initializes a struct containing both
     /// those 
     pub fn new(name: String, addr: Addr, secret: Uint128) -> DiceRoller {
-        return DiceRoller {
+        DiceRoller {
             name,
             addr,
             secret
@@ -121,7 +121,7 @@ impl Winner {
     /// Constructor function. Takes input parameters and initializes a struct containing both
     /// those items
     pub fn new(name: String, addr: Addr) -> Winner {
-        return Winner {
+        Winner {
             name,
             addr
         }

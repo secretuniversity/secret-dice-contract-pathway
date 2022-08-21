@@ -55,6 +55,13 @@ start-server: # CTRL+C to stop
 		-v $$(pwd):/root/code \
 		--name secretdev ghcr.io/scrtlabs/localsecret:v1.4.0-cw-v1-beta.2
 
+.PHONY: integration-test
+integration-test: build _integration-test
+_integration-test:
+	@#. ${HOME}/.nvm/nvm.sh && nvm use 16
+	npm --prefix tests/ install
+	npx ts-node ./tests/integration.ts
+
 .PHONY: clean
 clean:
 	cargo clean
