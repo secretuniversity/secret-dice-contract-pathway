@@ -26,6 +26,7 @@ This repo also comes with all the dependencies you need to develop Secret Contra
 - Reuven Podmazo [Github](https://github.com/reuvenpo)
 - Cashmaney [Github](https://github.com/Cashmaney)
 - Laura Weindorf [Github](https://github.com/secetchaingirl)
+- DDT5 [Github](https://github.com/DDT5)
 
 # Notes
 This secret contract was developed by adapting and merging these SCRT Labs' repositories:
