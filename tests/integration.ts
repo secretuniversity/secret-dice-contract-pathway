@@ -264,7 +264,7 @@ async function testSanity(
   let txP0Roll = await execRollDice(player0, contract);
   assert(txP0Roll.code === 0);
 
-  await new Promise(f => setTimeout(f, 1000));
+  await new Promise(f => setTimeout(f, 6000));
 
   let qRes = await queryWhoWon(player0, contract);
   assert((
